@@ -1,0 +1,644 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- ====================== STAMINA VARS ======================
+local enabled = false
+local staminaCache = {}
+local updateThread = nil
+
+local function findAndCacheStamina()
+    staminaCache = {}
+
+    pcall(function()
+        Player:SetAttribute("Stamina", math.huge)
+        Player:SetAttribute("MaxStamina", math.huge)
+        staminaCache[#staminaCache+1] = {type = "attribute", parent = Player}
+    end)
+
+    for _, v in ipairs(Player:GetDescendants()) do
+        if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+            local name = v.Name:lower()
+            if name:find("stam") or name:find("energ") or name:find("power") or name:find("endur") then
+                v.Value = math.huge
+                staminaCache[#staminaCache+1] = {type = "value", obj = v}
+            end
+        end
+    end
+end
+
+local function startInfiniteLoop()
+    updateThread = task.spawn(function()
+        while enabled do
+            for _, entry in ipairs(staminaCache) do
+                if entry.type == "value" and entry.obj then
+                    entry.obj.Value = math.huge
+                elseif entry.type == "attribute" then
+                    pcall(function()
+                        Player:SetAttribute("Stamina", math.huge)
+                        Player:SetAttribute("MaxStamina", math.huge)
+                    end)
+                end
+            end
+            task.wait(0.25)
+        end
+    end)
+end
+
+-- ====================== JUMP VARS ======================
+local jumpEnabled = false
+local jumpHeight = 10.5
+
+local function applyJump()
+    local char = Player.Character or Player.CharacterAdded:Wait()
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.UseJumpPower = false
+        humanoid.JumpHeight = jumpHeight
+    end
+end
+
+local function resetJump()
+    local char = Player.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.UseJumpPower = false
+            humanoid.JumpHeight = 7.2
+        end
+    end
+end
+
+-- ====================== ESP VARS ======================
+local espEnabled = false
+local espObjects = {}
+
+local function createESP(character, playerName)
+    if espObjects[playerName] then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_Highlight"
+    highlight.FillColor = Color3.fromRGB(255, 50, 50)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = character
+    highlight.Parent = character
+
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "ESP_Label"
+    billboardGui.Size = UDim2.fromOffset(100, 30)
+    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
+    billboardGui.AlwaysOnTop = true
+    billboardGui.Parent = character
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.fromScale(1, 1)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.new(1, 1, 1)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 13
+    nameLabel.Text = playerName
+    nameLabel.Parent = billboardGui
+
+    espObjects[playerName] = {highlight = highlight, billboard = billboardGui}
+end
+
+local function removeESP(playerName)
+    if espObjects[playerName] then
+        pcall(function()
+            espObjects[playerName].highlight:Destroy()
+            espObjects[playerName].billboard:Destroy()
+        end)
+        espObjects[playerName] = nil
+    end
+end
+
+local function enableESP()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player and p.Character then
+            createESP(p.Character, p.Name)
+        end
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        if not espEnabled then return end
+        p.CharacterAdded:Connect(function(char)
+            if not espEnabled then return end
+            task.wait(0.5)
+            createESP(char, p.Name)
+        end)
+    end)
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player then
+            p.CharacterAdded:Connect(function(char)
+                if not espEnabled then return end
+                task.wait(0.5)
+                createESP(char, p.Name)
+            end)
+        end
+    end
+end
+
+local function disableESP()
+    for _, p in ipairs(Players:GetPlayers()) do
+        removeESP(p.Name)
+    end
+    espObjects = {}
+end
+
+-- ====================== GUI ======================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ModernHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(650, 400)
+Main.Position = UDim2.fromScale(0.5, 0.5)
+Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 40)
+TopBar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = Main
+
+Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 250, 1, 0)
+Title.Position = UDim2.fromOffset(15, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Modern Hub"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+-- Botão Fechar (X) - fica à esquerda dos outros botões
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(30, 30)
+CloseBtn.Position = UDim2.new(1, -115, 0, 5)
+CloseBtn.Text = "X"
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = TopBar
+Instance.new("UICorner", CloseBtn)
+
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.fromOffset(30, 30)
+MinimizeBtn.Position = UDim2.new(1, -78, 0, 5)
+MinimizeBtn.Text = "-"
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+MinimizeBtn.TextColor3 = Color3.new(1, 1, 1)
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.TextSize = 18
+MinimizeBtn.Parent = TopBar
+Instance.new("UICorner", MinimizeBtn)
+
+local MaximizeBtn = Instance.new("TextButton")
+MaximizeBtn.Size = UDim2.fromOffset(30, 30)
+MaximizeBtn.Position = UDim2.new(1, -43, 0, 5)
+MaximizeBtn.Text = "□"
+MaximizeBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+MaximizeBtn.TextColor3 = Color3.new(1, 1, 1)
+MaximizeBtn.Font = Enum.Font.GothamBold
+MaximizeBtn.TextSize = 16
+MaximizeBtn.Parent = TopBar
+Instance.new("UICorner", MaximizeBtn)
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 140, 1, -40)
+Sidebar.Position = UDim2.fromOffset(0, 40)
+Sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -150, 1, -50)
+Content.Position = UDim2.fromOffset(145, 45)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0, 8)
+Layout.Parent = Sidebar
+
+local pages = {}
+
+local function createPage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.fromScale(1, 1)
+    page.BackgroundTransparency = 1
+    page.Visible = false
+    page.CanvasSize = UDim2.new()
+    page.ScrollBarThickness = 4
+    page.Parent = Content
+
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0, 8)
+    list.Parent = page
+
+    pages[name] = page
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -10, 0, 35)
+    button.Position = UDim2.fromOffset(5, 0)
+    button.Text = name
+    button.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Font = Enum.Font.Gotham
+    button.TextSize = 14
+    button.Parent = Sidebar
+
+    Instance.new("UICorner", button)
+
+    button.MouseButton1Click:Connect(function()
+        for _, p in pairs(pages) do
+            p.Visible = false
+        end
+        page.Visible = true
+    end)
+
+    return page
+end
+
+local MainPage = createPage("Main")
+local VisualPage = createPage("Visual")
+local SettingsPage = createPage("Settings")
+
+MainPage.Visible = true
+
+-- ====================== COMPONENTES ======================
+local function createToggle(parent, text, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -10, 0, 40)
+    holder.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    holder.Parent = parent
+
+    Instance.new("UICorner", holder)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -60, 1, 0)
+    label.Position = UDim2.fromOffset(10, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = holder
+
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.fromOffset(24, 24)
+    toggle.Position = UDim2.new(1, -34, 0.5, -12)
+    toggle.Text = ""
+    toggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    toggle.Parent = holder
+
+    Instance.new("UICorner", toggle)
+
+    local state = false
+
+    toggle.MouseButton1Click:Connect(function()
+        state = not state
+
+        TweenService:Create(toggle, TweenInfo.new(0.15), {
+            BackgroundColor3 = state
+                and Color3.fromRGB(0, 170, 255)
+                or Color3.fromRGB(60, 60, 60)
+        }):Play()
+
+        if callback then callback(state) end
+    end)
+end
+
+local function createSlider(parent, text, minVal, maxVal, defaultVal, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -10, 0, 60)
+    holder.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    holder.Parent = parent
+
+    Instance.new("UICorner", holder)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.fromOffset(10, 5)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. defaultVal
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = holder
+
+    local barBg = Instance.new("Frame")
+    barBg.Size = UDim2.new(1, -80, 0, 8)
+    barBg.Position = UDim2.new(0, 10, 0, 35)
+    barBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    barBg.Parent = holder
+    Instance.new("UICorner", barBg)
+
+    local barFill = Instance.new("Frame")
+    barFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    barFill.Parent = barBg
+    Instance.new("UICorner", barFill)
+
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.fromOffset(55, 24)
+    input.Position = UDim2.new(1, -65, 0, 28)
+    input.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    input.TextColor3 = Color3.new(1, 1, 1)
+    input.Font = Enum.Font.Gotham
+    input.TextSize = 13
+    input.Text = tostring(defaultVal)
+    input.Parent = holder
+    Instance.new("UICorner", input)
+
+    local currentVal = defaultVal
+
+    local function setValue(val)
+        val = math.clamp(tonumber(val) or currentVal, minVal, maxVal)
+        val = math.floor(val * 10) / 10
+        currentVal = val
+        label.Text = text .. ": " .. val
+        input.Text = tostring(val)
+        barFill.Size = UDim2.new((val - minVal) / (maxVal - minVal), 0, 1, 0)
+        if callback then callback(val) end
+    end
+
+    local sliding = false
+
+    barBg.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = true
+        end
+    end)
+
+    barBg.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = false
+        end
+    end)
+
+    UIS.InputChanged:Connect(function(inp)
+        if sliding and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local barPos = barBg.AbsolutePosition.X
+            local barSize = barBg.AbsoluteSize.X
+            local relative = math.clamp((inp.Position.X - barPos) / barSize, 0, 1)
+            local newVal = minVal + (maxVal - minVal) * relative
+            setValue(newVal)
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = false
+        end
+    end)
+
+    input.FocusLost:Connect(function()
+        setValue(input.Text)
+    end)
+end
+
+-- ====================== TOGGLES & SLIDERS ======================
+createToggle(MainPage, "Infinite Stamina", function(state)
+    enabled = state
+    if enabled then
+        findAndCacheStamina()
+        startInfiniteLoop()
+    else
+        updateThread = nil
+    end
+end)
+
+createToggle(MainPage, "Custom Jump Height", function(state)
+    jumpEnabled = state
+    if jumpEnabled then
+        applyJump()
+        Player.CharacterAdded:Connect(function()
+            if jumpEnabled then
+                task.wait(0.5)
+                applyJump()
+            end
+        end)
+    else
+        resetJump()
+    end
+end)
+
+createSlider(MainPage, "Jump Height", 1, 100, 10.5, function(val)
+    jumpHeight = val
+    if jumpEnabled then applyJump() end
+end)
+
+createToggle(VisualPage, "ESP Players", function(state)
+    espEnabled = state
+    if espEnabled then
+        enableESP()
+    else
+        disableESP()
+    end
+end)
+
+-- ====================== SETTINGS PAGE ======================
+local currentKey = Enum.KeyCode.K
+local listeningForKey = false
+local closeButtonVisible = true
+
+-- Toggle: mostrar/esconder botão fechar (X)
+createToggle(SettingsPage, "Mostrar botão fechar (X)", function(state)
+    closeButtonVisible = state
+    CloseBtn.Visible = state
+end)
+
+-- Toggle: notificações
+createToggle(SettingsPage, "Notificações", function(state)
+    -- adicione lógica de notificação aqui se quiser
+end)
+
+-- Keybind configurável
+local keybindHolder = Instance.new("Frame")
+keybindHolder.Size = UDim2.new(1, -10, 0, 75)
+keybindHolder.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+keybindHolder.Parent = SettingsPage
+Instance.new("UICorner", keybindHolder)
+
+local keybindTitle = Instance.new("TextLabel")
+keybindTitle.Size = UDim2.new(1, -10, 0, 20)
+keybindTitle.Position = UDim2.fromOffset(10, 7)
+keybindTitle.BackgroundTransparency = 1
+keybindTitle.Text = "Tecla para abrir/fechar GUI"
+keybindTitle.TextColor3 = Color3.new(1, 1, 1)
+keybindTitle.Font = Enum.Font.Gotham
+keybindTitle.TextSize = 14
+keybindTitle.TextXAlignment = Enum.TextXAlignment.Left
+keybindTitle.Parent = keybindHolder
+
+local keyDisplay = Instance.new("TextButton")
+keyDisplay.Size = UDim2.fromOffset(50, 28)
+keyDisplay.Position = UDim2.fromOffset(10, 36)
+keyDisplay.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+keyDisplay.TextColor3 = Color3.fromRGB(0, 170, 255)
+keyDisplay.Font = Enum.Font.GothamBold
+keyDisplay.TextSize = 14
+keyDisplay.Text = "K"
+keyDisplay.Parent = keybindHolder
+Instance.new("UICorner", keyDisplay)
+
+local changeKeyBtn = Instance.new("TextButton")
+changeKeyBtn.Size = UDim2.fromOffset(120, 28)
+changeKeyBtn.Position = UDim2.fromOffset(68, 36)
+changeKeyBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 130)
+changeKeyBtn.TextColor3 = Color3.new(1, 1, 1)
+changeKeyBtn.Font = Enum.Font.Gotham
+changeKeyBtn.TextSize = 13
+changeKeyBtn.Text = "Alterar tecla"
+changeKeyBtn.Parent = keybindHolder
+Instance.new("UICorner", changeKeyBtn)
+
+changeKeyBtn.MouseButton1Click:Connect(function()
+    listeningForKey = true
+    changeKeyBtn.Text = "Pressione..."
+    changeKeyBtn.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
+end)
+
+-- ====================== MINIMIZAR ======================
+local minimized = false
+
+MinimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+
+    if minimized then
+        Sidebar.Visible = false
+        Content.Visible = false
+        TweenService:Create(Main, TweenInfo.new(0.25), {Size = UDim2.fromOffset(650, 40)}):Play()
+        MinimizeBtn.Text = "+"
+    else
+        Sidebar.Visible = true
+        Content.Visible = true
+        TweenService:Create(Main, TweenInfo.new(0.25), {Size = UDim2.fromOffset(650, 400)}):Play()
+        MinimizeBtn.Text = "-"
+    end
+end)
+
+-- ====================== MAXIMIZAR ======================
+local maximized = false
+local oldSize = Main.Size
+local oldPos = Main.Position
+
+MaximizeBtn.MouseButton1Click:Connect(function()
+    maximized = not maximized
+
+    if maximized then
+        oldSize = Main.Size
+        oldPos = Main.Position
+        TweenService:Create(Main, TweenInfo.new(0.25), {
+            Size = UDim2.new(0.9, 0, 0.9, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0)
+        }):Play()
+    else
+        TweenService:Create(Main, TweenInfo.new(0.25), {
+            Size = oldSize,
+            Position = oldPos
+        }):Play()
+    end
+end)
+
+-- ====================== FECHAR (X) ======================
+local guiVisible = true
+
+CloseBtn.MouseButton1Click:Connect(function()
+    guiVisible = false
+    TweenService:Create(Main, TweenInfo.new(0.25), {
+        Position = UDim2.new(0.5, 0, -1, 0)
+    }):Play()
+    task.delay(0.25, function()
+        if not guiVisible then Main.Visible = false end
+    end)
+end)
+
+-- ====================== DRAG ======================
+local dragging = false
+local dragInput, dragStart, startPos
+
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- ====================== TECLA (CONFIGURÁVEL) ======================
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    -- Captura nova tecla se estiver ouvindo
+    if listeningForKey then
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            currentKey = input.KeyCode
+            keyDisplay.Text = input.KeyCode.Name
+            listeningForKey = false
+            changeKeyBtn.Text = "Alterar tecla"
+            changeKeyBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 130)
+        end
+        return
+    end
+
+    if gameProcessed then return end
+
+    if input.KeyCode == currentKey then
+        guiVisible = not guiVisible
+
+        if guiVisible then
+            Main.Visible = true
+            TweenService:Create(Main, TweenInfo.new(0.25), {
+                Position = UDim2.fromScale(0.5, 0.5)
+            }):Play()
+        else
+            TweenService:Create(Main, TweenInfo.new(0.25), {
+                Position = UDim2.new(0.5, 0, -1, 0)
+            }):Play()
+            task.delay(0.25, function()
+                if not guiVisible then Main.Visible = false end
+            end)
+        end
+    end
+end)
